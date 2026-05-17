@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Chat</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0a0f; --surface: #12121a; --surface2: #1a1a26; --border: #2a2a3d;
+    --accent: #7c6af7; --accent2: #a78bfa; --accent-glow: rgba(124,106,247,0.3);
+    --text: #e8e8f0; --text-muted: #6b6b8a; --text-dim: #9090b0;
+    --user-bubble: #1e1b3a; --code-bg: #0d0d14;
+    --green: #4ade80; --red: #f87171; --cyan: #22d3ee;
+  }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Syne', sans-serif; overflow: hidden; }
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background: radial-gradient(ellipse 80% 60% at 20% -10%, rgba(124,106,247,0.12) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 50% at 80% 110%, rgba(167,139,250,0.08) 0%, transparent 60%);
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  @keyframes bounce { 0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; } 40% { transform: scale(1); opacity: 1; } }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  /* API SCREEN */
+  #api-screen {
+    position: fixed; inset: 0; background: var(--bg); z-index: 200;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  #api-screen::before {
+    content: ''; position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(ellipse 80% 60% at 20% -10%, rgba(124,106,247,0.15) 0%, transparent 60%),
+                radial-gradient(ellipse 60% 50% at 80% 110%, rgba(167,139,250,0.1) 0%, transparent 60%);
+  }
+  .api-card {
+    position: relative; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 20px; padding: 36px; max-width: 420px; width: 100%;
+    text-align: center; animation: fadeIn 0.4s ease;
+  }
+  .api-logo { font-size: 42px; margin-bottom: 16px; filter: drop-shadow(0 0 20px var(--accent-glow)); display: block; }
+  .api-card h2 { font-size: 22px; font-weight: 800; letter-spacing: -0.3px; margin-bottom: 8px; }
+  .api-desc { font-size: 13px; color: var(--text-muted); line-height: 1.65; margin-bottom: 24px; }
+  .api-desc a { color: var(--accent2); text-decoration: none; }
+  .api-desc a:hover { text-decoration: underline; }
+  .api-input-wrap { display: flex; flex-direction: column; gap: 10px; }
+  #api-key-input {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 16px; color: var(--text); font-size: 13px;
+    font-family: 'JetBrains Mono', monospace; outline: none; width: 100%;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  #api-key-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  #api-key-input::placeholder { color: var(--text-muted); }
+  #api-error { color: var(--red); font-size: 12px; text-align: left; display: none; }
+  .api-submit {
+    background: linear-gradient(135deg, var(--accent), var(--accent2)); border: none;
+    border-radius: 10px; padding: 13px; color: white; font-size: 14px; font-weight: 700;
+    font-family: 'Syne', sans-serif; cursor: pointer; transition: all 0.2s;
+    box-shadow: 0 4px 16px var(--accent-glow);
+  }
+  .api-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 24px var(--accent-glow); }
+  .api-note { margin-top: 14px; font-size: 11px; color: var(--text-muted); }
+
+  /* MAIN APP */
+  #app { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100vh; max-width: 860px; margin: 0 auto; }
+  header { display: flex; align-items: center; gap: 12px; padding: 20px 24px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .logo { width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 0 20px var(--accent-glow); flex-shrink: 0; }
+  .header-text h1 { font-size: 17px; font-weight: 800; letter-spacing: -0.3px; }
+  .header-text p { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .status-dot { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--text-muted); }
+  .dot { width: 7px; height: 7px; background: var(--green); border-radius: 50%; box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
+  .logout-btn { background: transparent; border: 1px solid var(--border); color: var(--text-muted); font-size: 11px; font-family: 'Syne', sans-serif; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+  .logout-btn:hover { border-color: var(--red); color: var(--red); }
+
+  #messages { flex: 1; overflow-y: auto; padding: 24px 24px 8px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
+  #messages::-webkit-scrollbar { width: 4px; }
+  #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .welcome { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 16px; text-align: center; padding: 40px 20px; animation: fadeIn 0.5s ease; }
+  .welcome-icon { font-size: 48px; filter: drop-shadow(0 0 20px var(--accent-glow)); }
+  .welcome h2 { font-size: 28px; font-weight: 800; letter-spacing: -0.5px; background: linear-gradient(135deg, var(--text), var(--accent2)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+  .welcome p { font-size: 14px; color: var(--text-muted); max-width: 380px; line-height: 1.6; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
+  .chip { background: var(--surface2); border: 1px solid var(--border); border-radius: 20px; padding: 8px 16px; font-size: 13px; color: var(--text-dim); cursor: pointer; transition: all 0.2s; font-family: 'Syne', sans-serif; }
+  .chip:hover { border-color: var(--accent); color: var(--accent2); background: rgba(124,106,247,0.08); transform: translateY(-1px); }
+
+  .message { display: flex; gap: 12px; animation: slideUp 0.3s ease; }
+  .message.user { flex-direction: row-reverse; }
+  .avatar { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; margin-top: 2px; }
+  .avatar.ai { background: linear-gradient(135deg, var(--accent), var(--accent2)); box-shadow: 0 0 12px var(--accent-glow); }
+  .avatar.user { background: var(--surface2); border: 1px solid var(--border); }
+  .bubble { max-width: 75%; padding: 12px 16px; border-radius: 14px; font-size: 14px; line-height: 1.65; }
+  .message.user .bubble { background: var(--user-bubble); border: 1px solid rgba(124,106,247,0.25); border-top-right-radius: 4px; }
+  .message.ai .bubble { background: var(--surface); border: 1px solid var(--border); border-top-left-radius: 4px; }
+  .bubble p { margin-bottom: 8px; }
+  .bubble p:last-child { margin-bottom: 0; }
+  .bubble strong { color: var(--accent2); font-weight: 600; }
+  .bubble em { color: var(--text-dim); font-style: italic; }
+  .bubble ul, .bubble ol { margin: 6px 0 6px 18px; display: flex; flex-direction: column; gap: 3px; }
+  .bubble li { font-size: 14px; line-height: 1.6; }
+  .bubble code { background: var(--code-bg); border: 1px solid var(--border); padding: 1px 6px; border-radius: 5px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--cyan); }
+
+  .code-block { margin: 10px 0; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); background: var(--code-bg); }
+  .code-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px; background: rgba(255,255,255,0.03); border-bottom: 1px solid var(--border); }
+  .code-lang { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--accent2); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+  .copy-btn { display: flex; align-items: center; gap: 5px; background: transparent; border: 1px solid var(--border); color: var(--text-muted); padding: 4px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; font-family: 'Syne', sans-serif; transition: all 0.2s; font-weight: 600; }
+  .copy-btn:hover { border-color: var(--accent); color: var(--accent2); background: rgba(124,106,247,0.08); }
+  .copy-btn.copied { border-color: var(--green); color: var(--green); background: rgba(74,222,128,0.08); }
+  .copy-btn svg { width: 12px; height: 12px; }
+  .code-body { padding: 14px; overflow-x: auto; }
+  .code-body pre { font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.7; color: var(--text); white-space: pre; }
+  .kw { color: #c084fc; font-weight: 600; } .fn { color: #60a5fa; } .str { color: #86efac; }
+  .num { color: #f9a8d4; } .cm { color: #4b5563; font-style: italic; }
+  .tag { color: #f87171; } .attr { color: #fbbf24; } .sel { color: #22d3ee; } .prop { color: #a78bfa; }
+
+  .typing-indicator { display: flex; align-items: center; gap: 5px; padding: 14px 16px; }
+  .typing-indicator span { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; animation: bounce 1.2s infinite; }
+  .typing-indicator span:nth-child(2) { animation-delay: 0.15s; }
+  .typing-indicator span:nth-child(3) { animation-delay: 0.3s; }
+
+  #input-area { padding: 16px 24px 20px; flex-shrink: 0; border-top: 1px solid var(--border); }
+  .input-wrapper { display: flex; align-items: flex-end; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 10px 10px 16px; transition: border-color 0.2s, box-shadow 0.2s; }
+  .input-wrapper:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  #user-input { flex: 1; background: transparent; border: none; outline: none; color: var(--text); font-size: 14px; font-family: 'Syne', sans-serif; resize: none; line-height: 1.5; max-height: 140px; min-height: 22px; }
+  #user-input::placeholder { color: var(--text-muted); }
+  #send-btn { width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border: none; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 0.2s; box-shadow: 0 2px 12px var(--accent-glow); }
+  #send-btn:hover { transform: scale(1.05); }
+  #send-btn:active { transform: scale(0.96); }
+  #send-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  #send-btn svg { width: 16px; height: 16px; color: white; }
+  .hint { text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<!-- API KEY SCREEN -->
+<div id="api-screen">
+  <div class="api-card">
+    <span class="api-logo">✦</span>
+    <h2>Введи API-ключ</h2>
+    <p class="api-desc">
+      Получи ключ на <a href="https://console.anthropic.com/keys" target="_blank">console.anthropic.com</a>.<br>
+      Ключ хранится только в твоём браузере.
+    </p>
+    <div class="api-input-wrap">
+      <input type="password" id="api-key-input" placeholder="sk-ant-api03-..." />
+      <div id="api-error">Неверный ключ. Он должен начинаться с sk-ant-</div>
+      <button class="api-submit" onclick="submitApiKey()">Войти →</button>
+    </div>
+    <div class="api-note">🔒 Ключ не покидает твой браузер</div>
+  </div>
+</div>
+
+<!-- MAIN CHAT -->
+<div id="app">
+  <header>
+    <div class="logo">✦</div>
+    <div class="header-text">
+      <h1>AI Chat</h1>
+      <p>Claude Sonnet · Умный ассистент</p>
+    </div>
+    <div class="header-right">
+      <div class="status-dot"><div class="dot"></div>Online</div>
+      <button class="logout-btn" onclick="logout()">Сменить ключ</button>
+    </div>
+  </header>
+
+  <div id="messages">
+    <div class="welcome" id="welcome">
+      <div class="welcome-icon">✦</div>
+      <h2>Привет! Чем помочь?</h2>
+      <p>Задавай любые вопросы или попроси написать код — всё скопируется в один клик.</p>
+      <div class="chips">
+        <div class="chip" onclick="sendChip(this)">Напиши сортировку на Python</div>
+        <div class="chip" onclick="sendChip(this)">Создай лендинг на HTML/CSS</div>
+        <div class="chip" onclick="sendChip(this)">Объясни как работает async/await</div>
+        <div class="chip" onclick="sendChip(this)">Напиши Todo App на JavaScript</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="input-area">
+    <div class="input-wrapper">
+      <textarea id="user-input" placeholder="Напиши сообщение..." rows="1"></textarea>
+      <button id="send-btn" onclick="sendMessage()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </div>
+    <div class="hint">Enter — отправить · Shift+Enter — новая строка</div>
+  </div>
+</div>
+
+<script>
+let apiKey = '';
+const msgs = [];
+
+function init() {
+  const saved = localStorage.getItem('anthropic_key');
+  if (saved) { apiKey = saved; document.getElementById('api-screen').style.display = 'none'; }
+  document.getElementById('api-key-input').addEventListener('keydown', e => { if (e.key === 'Enter') submitApiKey(); });
+}
+
+function submitApiKey() {
+  const val = document.getElementById('api-key-input').value.trim();
+  const err = document.getElementById('api-error');
+  if (!val || !val.startsWith('sk-ant-')) { err.style.display = 'block'; return; }
+  err.style.display = 'none';
+  apiKey = val;
+  localStorage.setItem('anthropic_key', apiKey);
+  document.getElementById('api-screen').style.display = 'none';
+}
+
+function logout() {
+  localStorage.removeItem('anthropic_key');
+  apiKey = '';
+  document.getElementById('api-key-input').value = '';
+  document.getElementById('api-error').style.display = 'none';
+  document.getElementById('api-screen').style.display = 'flex';
+}
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function highlight(code, lang) {
+  let e = esc(code);
+  const l = (lang || '').toLowerCase();
+  if (l === 'html' || l === 'xml') {
+    return e.replace(/(&lt;\/?)([\w-]+)/g,'$1<span class="tag">$2</span>')
+            .replace(/([\w-]+=)(&quot;[^&]*&quot;)/g,'<span class="attr">$1</span><span class="str">$2</span>');
+  }
+  if (l === 'css') {
+    return e.replace(/(\/\*[\s\S]*?\*\/)/g,'<span class="cm">$1</span>')
+            .replace(/([.#]?[\w-]+)\s*\{/g,'<span class="sel">$1</span> {')
+            .replace(/([\w-]+)\s*:/g,'<span class="prop">$1</span>:')
+            .replace(/"([^"]*)"/g,'<span class="str">"$1"</span>');
+  }
+  e = e.replace(/(\/\/[^\n]*)/g,'<span class="cm">$1</span>');
+  if (l === 'py') e = e.replace(/(#[^\n<]*)/g,'<span class="cm">$1</span>');
+  e = e.replace(/(&quot;[^&]*?&quot;|&#39;[^&]*?&#39;)/g,'<span class="str">$1</span>');
+  e = e.replace(/\b(\d+\.?\d*)\b/g,'<span class="num">$1</span>');
+  e = e.replace(/\b([\w]+)(?=\s*\()/g,'<span class="fn">$1</span>');
+  const kw = l === 'py'
+    ? /\b(def|class|return|if|elif|else|for|while|import|from|as|with|try|except|finally|raise|pass|break|continue|lambda|yield|None|True|False|and|or|not|in|is)\b/g
+    : /\b(const|let|var|function|return|if|else|for|while|class|new|import|export|default|async|await|try|catch|throw|typeof|this|null|undefined|true|false|of|in|from|interface|type|enum)\b/g;
+  return e.replace(kw,'<span class="kw">$1</span>');
+}
+
+function render(text) {
+  const parts = text.split(/(```[\w]*\n[\s\S]*?```)/g);
+  return parts.map(p => {
+    const m = p.match(/^```([\w]*)\n([\s\S]*?)```$/);
+    if (m) {
+      const lang = m[1] || 'code', code = m[2], id = 'c' + Math.random().toString(36).slice(2);
+      return `<div class="code-block">
+        <div class="code-header">
+          <span class="code-lang">${esc(lang)||'CODE'}</span>
+          <button class="copy-btn" onclick="cp('${id}',this)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            Копировать
+          </button>
+        </div>
+        <div class="code-body"><pre id="${id}">${highlight(code,lang)}</pre></div>
+      </div>`;
+    }
+    let s = esc(p);
+    s = s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+    s = s.replace(/\*(.+?)\*/g,'<em>$1</em>');
+    s = s.replace(/`([^`]+)`/g,'<code>$1</code>');
+    s = s.replace(/^(\s*[-*]\s+.+(\n\s*[-*]\s+.+)*)/gm, m => {
+      return '<ul>'+m.split('\n').filter(l=>l.trim()).map(l=>`<li>${l.replace(/^\s*[-*]\s+/,'')}</li>`).join('')+'</ul>';
+    });
+    s = s.replace(/^(\s*\d+\.\s+.+(\n\s*\d+\.\s+.+)*)/gm, m => {
+      return '<ol>'+m.split('\n').filter(l=>l.trim()).map(l=>`<li>${l.replace(/^\s*\d+\.\s+/,'')}</li>`).join('')+'</ol>';
+    });
+    return s.split('\n\n').map(p=>p.trim()?`<p>${p.replace(/\n/g,' ')}</p>`:'').join('');
+  }).join('');
+}
+
+function cp(id, btn) {
+  navigator.clipboard.writeText(document.getElementById(id).innerText).then(() => {
+    btn.classList.add('copied');
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Скопировано!';
+    setTimeout(() => {
+      btn.classList.remove('copied');
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Копировать';
+    }, 2000);
+  });
+}
+
+const msgsEl = document.getElementById('messages');
+const inputEl = document.getElementById('user-input');
+const sendBtn = document.getElementById('send-btn');
+
+inputEl.addEventListener('input', () => { inputEl.style.height='auto'; inputEl.style.height=Math.min(inputEl.scrollHeight,140)+'px'; });
+inputEl.addEventListener('keydown', e => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} });
+function sendChip(el) { inputEl.value=el.textContent; sendMessage(); }
+
+function addMsg(role, html, isHtml) {
+  document.getElementById('welcome')?.remove();
+  const msg=document.createElement('div'); msg.className=`message ${role}`;
+  const av=document.createElement('div'); av.className=`avatar ${role}`; av.textContent=role==='ai'?'✦':'👤';
+  const bub=document.createElement('div'); bub.className='bubble';
+  bub.innerHTML=isHtml?html:esc(html).replace(/\n/g,'<br>');
+  msg.appendChild(av); msg.appendChild(bub); msgsEl.appendChild(msg);
+  msgsEl.scrollTop=msgsEl.scrollHeight;
+}
+
+function addTyping() {
+  const msg=document.createElement('div'); msg.className='message ai'; msg.id='typing';
+  const av=document.createElement('div'); av.className='avatar ai'; av.textContent='✦';
+  const bub=document.createElement('div'); bub.className='bubble';
+  bub.innerHTML='<div class="typing-indicator"><span></span><span></span><span></span></div>';
+  msg.appendChild(av); msg.appendChild(bub); msgsEl.appendChild(msg);
+  msgsEl.scrollTop=msgsEl.scrollHeight;
+  return msg;
+}
+
+async function sendMessage() {
+  const text=inputEl.value.trim();
+  if(!text||sendBtn.disabled) return;
+  if(!apiKey){document.getElementById('api-screen').style.display='flex';return;}
+  inputEl.value=''; inputEl.style.height='auto';
+  addMsg('user', text, false);
+  msgs.push({role:'user',content:text});
+  sendBtn.disabled=true;
+  const t=addTyping();
+  try {
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key':apiKey,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:2048,
+        system:'Ты умный AI-ассистент. Отвечай на русском языке, если пользователь пишет по-русски. Когда пишешь код — всегда используй markdown code blocks с указанием языка (```python, ```javascript, ```html и т.д.). Будь дружелюбным, чётким и полезным.',
+        messages:msgs
+      })
+    });
+    const data=await res.json();
+    t.remove();
+    if(data.error){
+      const e=data.error.message||'Ошибка API';
+      addMsg('ai',`<p style="color:var(--red)">❌ ${esc(e)}</p>`,true);
+      msgs.pop();
+    } else {
+      const reply=data.content?.[0]?.text||'Пустой ответ';
+      addMsg('ai',render(reply),true);
+      msgs.push({role:'assistant',content:reply});
+    }
+  } catch(e) {
+    t.remove();
+    addMsg('ai','<p style="color:var(--red)">❌ Ошибка запроса. Проверь API-ключ или соединение.</p>',true);
+    msgs.pop();
+  }
+  sendBtn.disabled=false;
+  inputEl.focus();
+}
+
+init();
+</script>
+</body>
+</html>
